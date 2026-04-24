@@ -1,6 +1,9 @@
 # IDE
 .windsurfrules
 
+# Internal tracking files
+other/
+
 # Dependencies
 node_modules/
 package-lock.json
