@@ -478,15 +478,7 @@ This is a training project. For modifications:
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
-
-For issues or questions:
-
-- Check [comprehensive-guide.md](comprehensive-guide.md)
-- Review [Troubleshooting](#-troubleshooting) section
-- Open an issue on GitHub
-
-## 🎯 Training Objectives
+🎯 Training Objectives
 
 This system helps Data Quality Engineers learn:
 
@@ -499,5 +491,3 @@ This system helps Data Quality Engineers learn:
 - ✅ Test reporting and documentation
 
 ---
-
-**Built for Test Automation Training** | **Confidential Training Material**
