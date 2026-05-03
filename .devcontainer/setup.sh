@@ -1,5 +1,5 @@
 #!/bin/bash
-# NO set -e — we handle errors per step instead of dying silently
+# No set -e — each step handles its own errors
 
 WORKSPACE="${CODESPACE_VSCODE_FOLDER:-/workspaces/$(ls /workspaces | head -1)}"
 echo "Workspace: $WORKSPACE"
@@ -37,35 +37,35 @@ echo "[3/8] Setting JAVA_HOME..."
 JAVA_PATH=$(readlink -f $(which java) 2>/dev/null) || JAVA_PATH=""
 if [ -n "$JAVA_PATH" ]; then
   export JAVA_HOME=$(dirname $(dirname $JAVA_PATH))
+  export PATH=$JAVA_HOME/bin:$PATH
+  export PYSPARK_PYTHON=python3
+  export PYSPARK_DRIVER_PYTHON=python3
+  # Persist for future sessions
   echo "export JAVA_HOME=$JAVA_HOME" >> ~/.bashrc
   echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> ~/.bashrc
   echo "export PYSPARK_PYTHON=python3" >> ~/.bashrc
   echo "export PYSPARK_DRIVER_PYTHON=python3" >> ~/.bashrc
   echo "[3/8] DONE — JAVA_HOME=$JAVA_HOME"
 else
-  echo "[3/8] WARNING — java not found, JAVA_HOME not set"
+  echo "[3/8] WARNING — java not found in PATH"
 fi
 
 # ── [4/8] Pipeline venv + PySpark ────────────
 echo ""
 echo "[4/8] Setting up pipeline virtual environment..."
-echo "      (PySpark is ~300MB — this takes 5-8 minutes)"
+echo "      PySpark is ~300MB — expect 5-8 minutes"
 cd "$WORKSPACE/pipeline"
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-VENV_STATUS=$?
-if [ $VENV_STATUS -eq 0 ]; then
-  echo "[4/8] DONE"
-else
-  echo "[4/8] WARNING — pip install exited with code $VENV_STATUS"
-fi
+python3 -c "import pyspark" 2>/dev/null \
+  && echo "[4/8] DONE — PySpark verified" \
+  || echo "[4/8] WARNING — PySpark not importable"
 cd "$WORKSPACE"
 
 # ── [5/8] PostgreSQL JDBC jar ────────────────
 echo ""
 echo "[5/8] Installing PostgreSQL JDBC jar..."
-source "$WORKSPACE/pipeline/venv/bin/activate" 2>/dev/null || true
 PYSPARK_JARS=$(python3 -c "import pyspark, os; print(os.path.join(os.path.dirname(pyspark.__file__), 'jars'))" 2>/dev/null) || PYSPARK_JARS=""
 if [ -n "$PYSPARK_JARS" ]; then
   curl -sL "https://jdbc.postgresql.org/download/postgresql-42.7.3.jar" \
@@ -74,7 +74,7 @@ if [ -n "$PYSPARK_JARS" ]; then
   sudo cp "$PYSPARK_JARS/postgresql-42.7.3.jar" /usr/share/java/postgresql.jar
   echo "[5/8] DONE"
 else
-  echo "[5/8] WARNING — PySpark not found, skipping JDBC jar"
+  echo "[5/8] WARNING — PySpark jars path not found, skipping"
 fi
 
 # ── [6/8] Generate data ──────────────────────
@@ -82,7 +82,7 @@ echo ""
 echo "[6/8] Generating good_data and bad_data CSVs..."
 cd "$WORKSPACE/data"
 pip install -q -r requirements.txt
-python generate_data.py
+python3 generate_data.py
 cd "$WORKSPACE"
 echo "[6/8] DONE"
 
@@ -107,7 +107,9 @@ pip install \
   "great-expectations==0.18.15" \
   psycopg2-binary==2.9.9 \
   python-dotenv==1.0.0
-echo "[8/8] DONE"
+pip show great-expectations 2>/dev/null | grep "Version" \
+  && echo "[8/8] DONE" \
+  || echo "[8/8] WARNING — great-expectations not found"
 
 echo ""
 echo "======================================"
