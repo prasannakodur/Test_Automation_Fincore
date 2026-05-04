@@ -1,61 +1,68 @@
 #!/bin/bash
-# No set -e — we handle errors per step
+
+# ── Output to both terminal AND log file in real time ──
+exec > >(tee /tmp/setup.log) 2>&1
 
 WORKSPACE="${CODESPACE_VSCODE_FOLDER:-/workspaces/$(ls /workspaces | head -1)}"
 cd "$WORKSPACE"
-echo "Workspace: $WORKSPACE"
 
 echo "======================================"
 echo " FinCore Bank — Codespace Setup"
+echo " Log: /tmp/setup.log"
+echo " Started: $(date)"
 echo "======================================"
+echo "Workspace: $WORKSPACE"
+
+# ── Helper: print step result ──────────────
+pass() { echo "  ✓ $1"; }
+fail() { echo "  ✗ FAILED: $1"; }
+warn() { echo "  ⚠ WARNING: $1"; }
 
 # ── [1/8] Install PostgreSQL ─────────────────
 echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "[1/8] Installing PostgreSQL..."
-sudo apt-get update -qq
-sudo apt-get install -y -qq postgresql postgresql-client
-echo "[1/8] DONE"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+sudo apt-get update -qq && pass "apt-get update" || fail "apt-get update"
+sudo apt-get install -y postgresql postgresql-client && pass "PostgreSQL installed" || fail "PostgreSQL install"
+echo "[1/8] DONE ✓"
 
 # ── [2/8] Configure PostgreSQL ───────────────
-# KEY: start service FIRST, then find pg_hba via filesystem
-# NOT via psql command (psql may not be ready yet)
 echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "[2/8] Configuring PostgreSQL..."
-sudo service postgresql start
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+sudo service postgresql start && pass "PostgreSQL started" || fail "PostgreSQL start"
 sleep 5
 
-# Find pg_hba.conf via filesystem — works regardless of PG state
 PG_HBA=$(find /etc/postgresql -name "pg_hba.conf" 2>/dev/null | head -1)
-echo "  Found pg_hba.conf: $PG_HBA"
+echo "  pg_hba.conf: $PG_HBA"
 
 if [ -n "$PG_HBA" ]; then
-  # Replace all auth methods with md5
   sudo sed -i 's/\bpeer\b/md5/g' "$PG_HBA"
   sudo sed -i 's/\bscram-sha-256\b/md5/g' "$PG_HBA"
   sudo sed -i 's/\btrust\b/md5/g' "$PG_HBA"
-  sudo service postgresql restart
+  sudo service postgresql restart && pass "PostgreSQL restarted with md5 auth" || fail "PostgreSQL restart"
   sleep 5
-  echo "  Auth updated to md5"
 else
-  echo "  WARNING: pg_hba.conf not found"
+  warn "pg_hba.conf not found — auth may fail"
 fi
 
-# Create user and DB using postgres peer auth (always works locally)
 sudo -u postgres psql -c "CREATE USER admin WITH PASSWORD 'fincore123' SUPERUSER;" 2>/dev/null \
-  && echo "  User admin created" || echo "  User admin already exists"
+  && pass "User admin created" || pass "User admin already exists"
 sudo -u postgres psql -c "CREATE DATABASE fincore OWNER admin;" 2>/dev/null \
-  && echo "  Database fincore created" || echo "  Database fincore already exists"
+  && pass "Database fincore created" || pass "Database fincore already exists"
 
-# Verify password auth works end-to-end
 PGPASSWORD=fincore123 psql -h localhost -U admin -d fincore -c "SELECT 1;" >/dev/null 2>&1 \
-  && echo "[2/8] DONE — connection verified" \
-  || echo "[2/8] WARNING — connection check failed"
+  && pass "DB connection verified — admin:fincore123 works" \
+  || fail "DB connection failed — check pg_hba.conf"
+echo "[2/8] DONE ✓"
 
 # ── [3/8] JAVA_HOME ──────────────────────────
-# KEY: export directly in THIS shell process
-# Do NOT rely on source ~/.bashrc — non-interactive shell ignores it
 echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "[3/8] Setting JAVA_HOME..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 JAVA_BIN=$(which java 2>/dev/null)
 if [ -n "$JAVA_BIN" ]; then
   JAVA_REAL=$(readlink -f "$JAVA_BIN")
@@ -63,72 +70,106 @@ if [ -n "$JAVA_BIN" ]; then
   export PATH="$JAVA_HOME/bin:$PATH"
   export PYSPARK_PYTHON=python3
   export PYSPARK_DRIVER_PYTHON=python3
-  # Also persist for interactive sessions
-  echo "export JAVA_HOME=$JAVA_HOME"       >> ~/.bashrc
-  echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> ~/.bashrc
-  echo "export PYSPARK_PYTHON=python3"      >> ~/.bashrc
-  echo "export PYSPARK_DRIVER_PYTHON=python3" >> ~/.bashrc
-  echo "[3/8] DONE — JAVA_HOME=$JAVA_HOME"
-  java -version 2>&1 | head -1
+  echo "export JAVA_HOME=$JAVA_HOME"            >> ~/.bashrc
+  echo "export PATH=\$JAVA_HOME/bin:\$PATH"     >> ~/.bashrc
+  echo "export PYSPARK_PYTHON=python3"           >> ~/.bashrc
+  echo "export PYSPARK_DRIVER_PYTHON=python3"    >> ~/.bashrc
+  pass "JAVA_HOME=$JAVA_HOME"
+  java -version 2>&1 | head -1 && pass "Java version confirmed" || fail "java -version"
 else
-  echo "[3/8] WARNING — java not found in PATH"
+  fail "java not found — PySpark will not work"
 fi
+echo "[3/8] DONE ✓"
 
 # ── [4/8] Pipeline venv + PySpark ────────────
-# KEY: no --quiet — we need to see errors
-# JAVA_HOME is already exported above in THIS shell
 echo ""
-echo "[4/8] Setting up pipeline virtual environment..."
-echo "      PySpark ~300MB — expect 5-8 minutes"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[4/8] Pipeline virtual environment..."
+echo "      PySpark ~300MB — expect 5-8 min"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 cd "$WORKSPACE/pipeline"
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv venv && pass "venv created" || fail "venv creation"
+source venv/bin/activate && pass "venv activated" || fail "venv activation"
+echo "  Installing dependencies (you will see progress)..."
 pip install -r requirements.txt
-python3 -c "import pyspark; print('  PySpark import OK')" 2>/dev/null \
-  && echo "[4/8] DONE" \
-  || echo "[4/8] WARNING — PySpark not importable"
+PIP_EXIT=$?
+if [ $PIP_EXIT -eq 0 ]; then
+  pass "pip install completed"
+else
+  fail "pip install failed with exit code $PIP_EXIT"
+fi
+python3 -c "import pyspark; print('  PySpark version:', pyspark.__version__)" \
+  && pass "PySpark import verified" \
+  || fail "PySpark import failed"
 cd "$WORKSPACE"
+echo "[4/8] DONE ✓"
 
 # ── [5/8] PostgreSQL JDBC jar ────────────────
 echo ""
-echo "[5/8] Installing PostgreSQL JDBC jar..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[5/8] PostgreSQL JDBC jar..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 PYSPARK_JARS=$(python3 -c \
   "import pyspark, os; print(os.path.join(os.path.dirname(pyspark.__file__), 'jars'))" \
   2>/dev/null)
 if [ -n "$PYSPARK_JARS" ]; then
-  curl -sL "https://jdbc.postgresql.org/download/postgresql-42.7.3.jar" \
-    -o "$PYSPARK_JARS/postgresql-42.7.3.jar"
+  pass "PySpark jars dir: $PYSPARK_JARS"
+  curl -L "https://jdbc.postgresql.org/download/postgresql-42.7.3.jar" \
+    -o "$PYSPARK_JARS/postgresql-42.7.3.jar" \
+    && pass "JDBC jar downloaded" || fail "JDBC jar download"
   sudo mkdir -p /usr/share/java
-  sudo cp "$PYSPARK_JARS/postgresql-42.7.3.jar" /usr/share/java/postgresql.jar
-  echo "[5/8] DONE — jar at /usr/share/java/postgresql.jar"
+  sudo cp "$PYSPARK_JARS/postgresql-42.7.3.jar" /usr/share/java/postgresql.jar \
+    && pass "JDBC jar copied to /usr/share/java/postgresql.jar" || fail "JDBC jar copy"
 else
-  echo "[5/8] WARNING — could not find PySpark jars directory"
+  fail "PySpark jars dir not found — JDBC jar not installed"
 fi
+echo "[5/8] DONE ✓"
 
 # ── [6/8] Generate data ──────────────────────
 echo ""
-echo "[6/8] Generating good_data and bad_data CSVs..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[6/8] Generating CSV data..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 cd "$WORKSPACE/data"
-pip install -q -r requirements.txt
-python3 generate_data.py
+pip install -q -r requirements.txt && pass "data deps installed" || fail "data deps"
+python3 generate_data.py && pass "Data generated" || fail "Data generation"
+ls good_data/*.csv 2>/dev/null | wc -l | xargs -I{} echo "  CSV files in good_data: {}"
+ls bad_data/*.csv  2>/dev/null | wc -l | xargs -I{} echo "  CSV files in bad_data:  {}"
 cd "$WORKSPACE"
-echo "[6/8] DONE"
+echo "[6/8] DONE ✓"
 
-# ── [7/8] App env files + Node deps ──────────
+# ── [7/8] App env + Node deps ────────────────
 echo ""
-echo "[7/8] Setting up app environment..."
-[ -f "$WORKSPACE/app/.env" ]      || cp "$WORKSPACE/app/.env.example"      "$WORKSPACE/app/.env"
-[ -f "$WORKSPACE/pipeline/.env" ] || cp "$WORKSPACE/pipeline/.env.example" "$WORKSPACE/pipeline/.env"
-# Ensure DB password is set correctly
-sed -i 's/DB_PASSWORD=.*/DB_PASSWORD=fincore123/' "$WORKSPACE/pipeline/.env"
-cd "$WORKSPACE/app"        && npm install --silent
-cd "$WORKSPACE/app/client" && npm install --silent
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[7/8] App environment + Node deps..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+[ -f "$WORKSPACE/app/.env" ] \
+  && pass "app/.env exists" \
+  || (cp "$WORKSPACE/app/.env.example" "$WORKSPACE/app/.env" && pass "app/.env created from template")
+
+[ -f "$WORKSPACE/pipeline/.env" ] \
+  && pass "pipeline/.env exists" \
+  || (cp "$WORKSPACE/pipeline/.env.example" "$WORKSPACE/pipeline/.env" && pass "pipeline/.env created from template")
+
+sed -i 's/DB_PASSWORD=.*/DB_PASSWORD=fincore123/' "$WORKSPACE/pipeline/.env" \
+  && pass "DB password set in pipeline/.env"
+
+echo "  Installing app Node deps..."
+cd "$WORKSPACE/app" && npm install --silent \
+  && pass "app Node deps installed" || fail "app npm install"
+
+echo "  Installing client Node deps..."
+cd "$WORKSPACE/app/client" && npm install --silent \
+  && pass "client Node deps installed" || fail "client npm install"
+
 cd "$WORKSPACE"
-echo "[7/8] DONE"
+echo "[7/8] DONE ✓"
 
 # ── [8/8] UC1 test deps ──────────────────────
 echo ""
-echo "[8/8] Installing UC1 test dependencies..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[8/8] UC1 test dependencies..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 deactivate 2>/dev/null || true
 pip install \
   pytest==7.4.4 \
@@ -137,14 +178,20 @@ pip install \
   psycopg2-binary==2.9.9 \
   python-dotenv==1.0.0
 pip show great-expectations 2>/dev/null | grep "Version" \
-  && echo "[8/8] DONE" \
-  || echo "[8/8] WARNING — great-expectations not found"
+  && pass "great-expectations installed" \
+  || fail "great-expectations not found"
+echo "[8/8] DONE ✓"
 
+# ── SUMMARY ──────────────────────────────────
 echo ""
 echo "======================================"
-echo " Setup complete!"
+echo " Setup complete! $(date)"
 echo ""
-echo " Load data:"
-echo "   cd pipeline && source venv/bin/activate"
-echo "   JAVA_HOME=$JAVA_HOME PYSPARK_PYTHON=python3 python3 ingest.py good_data"
+echo " Full log: /tmp/setup.log"
+echo ""
+echo " Next — load data:"
+echo "   cd pipeline"
+echo "   source venv/bin/activate"
+echo "   JAVA_HOME=$JAVA_HOME PYSPARK_PYTHON=python3 \\"
+echo "   python3 ingest.py good_data"
 echo "======================================"
