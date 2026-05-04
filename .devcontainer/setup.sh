@@ -41,24 +41,34 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 sudo service postgresql start && pass "PostgreSQL started" || fail "PostgreSQL start"
 sleep 5
 
+# Write precise pg_hba.conf
+# postgres superuser keeps peer — so sudo -u postgres psql works without password
+# all other users get md5 — so admin:fincore123 password auth works
 PG_HBA=$(find /etc/postgresql -name "pg_hba.conf" 2>/dev/null | head -1)
-echo "  pg_hba.conf: $PG_HBA"
+pass "pg_hba.conf: $PG_HBA"
 
 if [ -n "$PG_HBA" ]; then
-  sudo sed -i 's/\bpeer\b/md5/g' "$PG_HBA"
-  sudo sed -i 's/\bscram-sha-256\b/md5/g' "$PG_HBA"
-  sudo sed -i 's/\btrust\b/md5/g' "$PG_HBA"
+  sudo tee "$PG_HBA" > /dev/null <<'EOF'
+# TYPE  DATABASE  USER      ADDRESS         METHOD
+local   all       postgres                  peer
+local   all       all                       md5
+host    all       all       127.0.0.1/32    md5
+host    all       all       ::1/128         md5
+EOF
   sudo service postgresql restart && pass "PostgreSQL restarted with md5 auth" || fail "PostgreSQL restart"
   sleep 5
+  pass "pg_hba.conf configured — postgres=peer, others=md5"
 else
   warn "pg_hba.conf not found — auth may fail"
 fi
 
+# Create user and database using postgres peer auth (no password needed)
 sudo -u postgres psql -c "CREATE USER admin WITH PASSWORD 'fincore123' SUPERUSER;" 2>/dev/null \
   && pass "User admin created" || pass "User admin already exists"
 sudo -u postgres psql -c "CREATE DATABASE fincore OWNER admin;" 2>/dev/null \
   && pass "Database fincore created" || pass "Database fincore already exists"
 
+# Verify password auth works for admin user
 PGPASSWORD=fincore123 psql -h localhost -U admin -d fincore -c "SELECT 1;" >/dev/null 2>&1 \
   && pass "DB connection verified — admin:fincore123 works" \
   || fail "DB connection failed — check pg_hba.conf"
