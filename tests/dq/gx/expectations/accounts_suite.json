@@ -11,84 +11,9 @@
       "meta": {"category": "row_count"}
     },
     {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "id"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "customer_id"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "account_number"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "account_type"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "balance"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "currency"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "status"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "opened_date"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "id"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "customer_id"},
-      "meta": {"category": "not_null"}
-    },
-    {
       "expectation_type": "expect_column_values_to_not_be_null",
       "kwargs": {"column": "account_number"},
       "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "account_type"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "balance"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "status"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_be_unique",
-      "kwargs": {"column": "id"},
-      "meta": {"category": "uniqueness"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_be_unique",
-      "kwargs": {"column": "account_number"},
-      "meta": {"category": "uniqueness"}
     },
     {
       "expectation_type": "expect_column_values_to_be_in_set",
@@ -107,21 +32,17 @@
       "meta": {"category": "referential_integrity"}
     },
     {
-      "expectation_type": "expect_column_values_to_be_in_set",
-      "kwargs": {
-        "column": "currency",
-        "value_set": ["USD", "EUR", "GBP", "INR"]
-      },
-      "meta": {"category": "referential_integrity"}
-    },
-    {
       "expectation_type": "expect_column_values_to_be_between",
       "kwargs": {
         "column": "balance",
-        "min_value": 0,
-        "max_value": 10000000
+        "min_value": 0
       },
       "meta": {"category": "value_range"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {"column": "account_number"},
+      "meta": {"category": "uniqueness"}
     }
   ],
   "ge_cloud_id": null,

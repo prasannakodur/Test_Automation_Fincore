@@ -1,310 +1,186 @@
-# claude.md — FinCore Bank Test Automation
+# CLAUDE.md
 
-> This file is the single source of truth for any AI assistant working on this project.
-> Read it fully before touching any file. Update the "Current Status" section after every session.
-
----
-
-## 1. Project Identity
-
-**Project:** FinCore Bank — Test Automation Training Programme
-**Repo:** https://github.com/amitbad/fincore-app
-**Owner:** Trainee Data Quality Engineer
-**Role of AI:** Senior QA Architect (20 years experience) — pair-programming partner
-
-This is a **training project**, not a production system. The goal is to learn enterprise-grade
-test automation by building a complete framework against a realistic banking simulation.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---
 
-## 2. System Under Test — Read-Only
+## Project
 
-These folders are the application. Never modify them. Never add files inside them.
+FinCore Bank — Test Automation Training Programme. Build a complete test automation framework against a realistic banking simulation. Training project, not production.
+Repo: https://github.com/prasannakodur/Test_Automation_Fincore
 
-```
-fincore-app/
-├── app/              ← Node.js REST API + React UI  (READ ONLY)
-├── data/             ← CSV source files: good_data/, bad_data/  (READ ONLY)
-├── db/               ← PostgreSQL init SQL  (READ ONLY)
-└── pipeline/         ← PySpark ingest + transformations.py  (READ ONLY)
-```
-
-### What the system does
-
-Data flows in one direction:
-
-```
-CSV files (good_data / bad_data)
-        ↓
-PySpark Pipeline  →  PostgreSQL 15 (db: fincore)
-                             ↓
-                     Node.js REST API  :4000
-                             ↓
-                     React UI          :3000
-```
-
-### Four tables in PostgreSQL
-
-| Table        | Good data rows | Key fields (inferred)                        |
-|--------------|---------------|----------------------------------------------|
-| customers    | 10,000        | customer_id, name, email, phone, created_at  |
-| accounts     | 25,000        | account_id, customer_id, balance, status     |
-| transactions | 500,000       | transaction_id, account_id, amount, date     |
-| loans        | 8,000         | loan_id, customer_id, amount, duration_days  |
-
-### Credentials (never hardcode — always read from env or conftest fixture)
-
-| Service    | Host      | Port | DB      | User  | Password   |
-|------------|-----------|------|---------|-------|------------|
-| PostgreSQL | localhost | 5432 | fincore | admin | fincore123 |
-| API        | localhost | 4000 | —       | —     | —          |
-| UI         | localhost | 3000 | —       | admin | Admin@123  |
+**Sole workspace: `tests/` only. Never create or modify files inside `app/`, `data/`, `db/`, or `pipeline/` — those are the read-only System Under Test.**
 
 ---
 
-## 3. Environment — No Docker
+## Use Cases
 
-**Constraint:** Docker is not available. All services run natively inside GitHub Codespaces.
+| UC | Name | Tools | Status |
+|---|---|---|---|
+| UC1 | Data Quality | Great Expectations 0.18.x, pytest | IN PROGRESS |
+| UC2 | API Automation | pytest-bdd, requests, psycopg2 | NOT STARTED |
+| UC3 | UI Automation | pytest-bdd, Playwright | NOT STARTED |
+| UC4 | Pipeline Testing | PySpark, pytest, GX | NOT STARTED |
+| UC5 | CI/CD | GitHub Actions (replaces Jenkins — no Docker server needed) | NOT STARTED |
 
-**Runtime:** GitHub Codespaces — Ubuntu 22.04, 4-core machine minimum
-**Config:** `.devcontainer/devcontainer.json` + `.devcontainer/setup.sh` (committed to repo)
+UC1 (good_data) must pass before running UC2 or UC3. GX is the quality gate — if it fails, downstream tests must not run.
 
-### What setup.sh provisions automatically on first launch
+---
 
-- PostgreSQL 15 (service started, `fincore` DB + `admin` user created)
-- Python 3.11 + pipeline venv at `pipeline/venv/`
-- Node.js 20 + npm deps for `app/` and `app/client/`
-- Base test deps: pytest, great-expectations, psycopg2-binary, pytest-html
+## Environment (GitHub Codespaces — Ubuntu 22.04, no Docker)
 
-### Every Codespace session — run this first
+`setup.sh` auto-provisions on first launch: PostgreSQL 15, Python 3.11 venv at `pipeline/venv/`, Node.js 20, base test deps (pytest, great-expectations, psycopg2-binary, pytest-html).
 
+**Every session:**
 ```bash
 sudo service postgresql start
 ```
 
-### Load data (run once per data scenario)
-
+**Load data (truncates and reloads all 4 tables):**
 ```bash
-# Good data — clean, all expectations must PASS
-cd pipeline && source venv/bin/activate && bash run_pipeline.sh good_data && cd ..
-
-# Bad data — intentional violations, specific expectations must FAIL
-cd pipeline && source venv/bin/activate && bash run_pipeline.sh bad_data && cd ..
+cd pipeline && source venv/bin/activate && bash run_pipeline.sh good_data && cd ..  # all GX must PASS
+cd pipeline && source venv/bin/activate && bash run_pipeline.sh bad_data && cd ..   # specific GX must FAIL
 ```
 
-### Start the application (when needed for UC2, UC3)
-
+**Start API + UI (UC2, UC3):**
 ```bash
-bash start-app.sh
-# API: http://localhost:4000/api/v1   Swagger: http://localhost:4000/api/docs
-# UI:  http://localhost:3000
+bash start-app.sh   # API: http://localhost:4000/api/v1  |  Swagger: /api/docs  |  UI: http://localhost:3000
 ```
 
 ---
 
-## 4. Your Workspace — tests/ Only
+## Running Tests
 
-All test code lives exclusively here. This is the only folder you create or modify.
+```bash
+pip install -r tests/requirements.txt              # first time only
 
+python tests/dq/run_gx.py                          # UC1 standalone, exit 0/1
+pytest tests/dq/test_great_expectations.py -v      # UC1 via pytest
+pytest tests/api/   --html=tests/reports/api_report.html -v
+pytest tests/ui/    --html=tests/reports/ui_report.html -v
+pytest tests/pipeline/ --html=tests/reports/pipeline_report.html -v
+
+pytest tests/api/test_customers.py -v -k "test_get_customer_by_id"  # single test
+```
+
+---
+
+## Architecture
+
+```
+CSV files (data/good_data or bad_data)
+    → pipeline/ingest.py  (PySpark: reads, transforms, loads)
+    → PostgreSQL 15  (db: fincore, 4 tables)
+    → app/src/  (Node.js REST API, port 4000)
+    → app/client/  (React 18 UI, port 3000)
+```
+
+### PostgreSQL Schema (exact column names — verify with `SELECT * FROM <table> LIMIT 5` before writing expectations)
+
+| Table | Rows | Exact column names |
+|---|---|---|
+| customers | 10,000 | id, name (UPPERCASE), email (UNIQUE NOT NULL), phone, date_of_birth, status, kyc_verified |
+| accounts | 25,000 | id, customer_id (FK), account_number (UNIQUE NOT NULL), account_type, balance, currency, status, opened_date |
+| transactions | 500,000 | id, account_id (FK), transaction_type, amount (>0), currency, transaction_date (≤now), status, reference_id (UNIQUE) |
+| loans | 8,000 | id, customer_id (FK), loan_type, principal_amount, outstanding_amount (NOT NULL), interest_rate (1–30), start_date, end_date (>start), status, loan_duration_days (computed), emi_amount (computed) |
+
+Enum values — `customers.status`: active/inactive/blocked · `accounts.account_type`: savings/current/fixed_deposit · `accounts.status`: active/dormant/closed · `transactions.transaction_type`: credit/debit/transfer · `transactions.status`: completed/pending/failed/reversed · `loans.loan_type`: home/personal/auto/education · `loans.status`: active/closed/defaulted/restructured
+
+### Pipeline Transformations (`pipeline/transformations.py` — UC4 unit test targets)
+`standardise_name` (→ UPPERCASE) · `standardise_date` (dd/MM/yyyy → DATE) · `compute_loan_duration` (end−start days) · `compute_emi` (EMI formula) · `map_status_code` (int → string label) · `fill_default_currency` (NULL → USD) · `filter_zero_amounts` (drop ≤0) · `trim_all_strings` · `remove_duplicates`
+
+### API Endpoints (JWT bearer required on all except health + login)
+`POST /auth/login` → JWT · `GET /health` · `GET /customers` (status, page, limit, search) · `GET /customers/:id` (+ accounts + txns) · `GET /accounts` (customer_id, status, type) · `GET /transactions` (account_id, type, status, from_date, to_date, min/max_amount) · `GET /loans` (customer_id, status, type, page) · `GET /loans/:id` (incl. loan_duration_days, emi_amount) · `GET /dashboard/summary`
+
+### Test Workspace
 ```
 tests/
-├── conftest.py               ← shared fixtures: DB connection, API base URL
-├── requirements.txt          ← all test dependencies pinned
-│
-├── dq/                       ← UC1: Great Expectations
-│   ├── gx/
-│   │   ├── great_expectations.yml
-│   │   ├── expectations/
-│   │   │   ├── customers_suite.json
-│   │   │   ├── accounts_suite.json
-│   │   │   ├── transactions_suite.json
-│   │   │   └── loans_suite.json
-│   │   └── checkpoints/
-│   │       └── fincore_checkpoint.yml
-│   ├── run_gx.py             ← GX trigger script (runs all 4 suites)
-│   ├── test_great_expectations.py  ← pytest wrapper (calls run_gx.py)
-│   └── reports/              ← Data Docs HTML output
-│
-├── api/                      ← UC2: pytest-bdd API tests
-├── ui/                       ← UC3: pytest-bdd UI tests (Playwright)
-├── pipeline/                 ← UC4: PySpark unit tests + E2E
-└── Jenkinsfile               ← UC5: CI/CD (adapted to GitHub Actions)
+├── conftest.py                      — db_engine (SQLAlchemy, session-scoped), api_base_url
+├── requirements.txt                 — pinned deps
+├── dq/gx/great_expectations.yml    — GX config, PostgreSQL datasource via env vars
+├── dq/gx/expectations/             — 4 suite JSON files
+├── dq/gx/checkpoints/fincore_checkpoint.yml
+├── dq/run_gx.py                    — standalone runner, sys.exit(0/1)
+├── dq/test_great_expectations.py   — pytest wrapper
+├── api/features/  api/steps/       — UC2: Gherkin + step defs
+├── ui/features/   ui/steps/        — UC3: Playwright headless
+├── pipeline/test_transformations.py  pipeline/test_e2e.py
+└── reports/dq_good/  reports/dq_bad/  reports/*.html
 ```
 
 ---
 
-## 5. Use Cases — Implementation Roadmap
+## Constraints & Working Rules
 
-| UC  | Name              | Tools                          | Status      |
-|-----|-------------------|-------------------------------|-------------|
-| UC1 | Data Quality      | Great Expectations, pytest     | IN PROGRESS |
-| UC2 | API Automation    | pytest-bdd, requests, psycopg2 | NOT STARTED |
-| UC3 | UI Automation     | pytest-bdd, Playwright         | NOT STARTED |
-| UC4 | Pipeline Testing  | PySpark, pytest, GX            | NOT STARTED |
-| UC5 | CI/CD             | GitHub Actions                 | NOT STARTED |
-
-> UC5 replaces Jenkins (no Docker) with GitHub Actions workflows under `.github/workflows/`.
-
----
-
-## 6. UC1 — Detailed Spec (Current Focus)
-
-### What must be built
-
-1. GX Expectation Suites for all 4 tables (`customers`, `accounts`, `transactions`, `loans`)
-2. A GX Checkpoint that runs all 4 suites in one command
-3. `tests/dq/run_gx.py` — standalone trigger script
-4. `tests/dq/test_great_expectations.py` — pytest wrapper so `pytest` can invoke it
-5. Data Docs HTML reports generated for both good and bad data runs
-
-### Two proof runs required
-
-- **Good data run:** pipeline loaded `good_data` → all expectations PASS
-- **Bad data run:** pipeline loaded `bad_data` → specific expectations FAIL (proves rules work)
-
-### GX connection to PostgreSQL
-
+**Credentials — always construct from env vars, never hardcode:**
 ```python
-# Pattern — always construct from env vars, never hardcode
-import os
 connection_string = (
-    f"postgresql+psycopg2://{os.getenv('PGUSER', 'admin')}:"
-    f"{os.getenv('PGPASSWORD', 'fincore123')}@"
-    f"{os.getenv('PGHOST', 'localhost')}:"
-    f"{os.getenv('PGPORT', '5432')}/"
-    f"{os.getenv('PGDATABASE', 'fincore')}"
+    f"postgresql+psycopg2://{os.getenv('PGUSER','admin')}:{os.getenv('PGPASSWORD','fincore123')}"
+    f"@{os.getenv('PGHOST','localhost')}:{os.getenv('PGPORT','5432')}/{os.getenv('PGDATABASE','fincore')}"
 )
 ```
 
-### Expectation categories per table
+| Service | Host | Port | DB | User | Password |
+|---|---|---|---|---|---|
+| PostgreSQL | localhost | 5432 | fincore | admin | fincore123 |
+| API | localhost | 4000 | — | — | — |
+| UI | localhost | 3000 | — | admin | Admin@123 |
 
-Each suite must cover these categories at minimum:
+**GX version: 0.18.x only** — 1.x has breaking API changes. Context root: `tests/dq/gx/`. Suite files target `"great_expectations_version": "0.18.15"`.
 
-| Category              | Example expectation                                   |
-|-----------------------|-------------------------------------------------------|
-| Row count             | expect_table_row_count_to_be_between                  |
-| Column existence      | expect_column_to_exist                                |
-| Not null              | expect_column_values_to_not_be_null                   |
-| Uniqueness            | expect_column_values_to_be_unique (PKs)               |
-| Value range           | expect_column_values_to_be_between (amounts, dates)   |
-| Regex / format        | expect_column_values_to_match_regex (email, phone)    |
-| Referential integrity | expect_column_values_to_be_in_set (status enums)      |
-| Computed fields       | expect_column_values_to_not_be_null (loan_duration)   |
+**Simplicity first** — use built-in GX expectations before writing custom classes; flat `conftest.py` before fixture hierarchies; `subprocess.run` before CLI wrappers.
 
-> Tip: inspect the actual column names first with `\d tablename` in psql before writing any suite.
+**Think before writing expectations** — always sample actual data before writing a regex or range check. Run `SELECT * FROM <table> LIMIT 5;` first.
+
+**UI selectors** — all React portal elements have `data-testid` attributes; use those, never CSS classes or text content.
 
 ---
 
-## 7. The Four Working Principles
+## UC1 Expectation Categories (every suite must cover all 8)
 
-These are non-negotiable. They apply to every file, every session, every UC.
-
----
-
-### Principle 1 — Think Before Coding
-
-Before writing any test code, answer these questions:
-
-- What is the exact schema of the table? (Run `\d tablename` in psql first)
-- What does the column actually contain? (Sample 5 rows before writing a regex)
-- What is the expected behaviour for good data vs bad data?
-- Does a simpler assertion cover this, or do I genuinely need a custom expectation?
-
-**In practice for UC1:** Never write an expectation for a column you haven't seen real data for.
-Connect to the DB, run `SELECT * FROM customers LIMIT 5;` before writing the customers suite.
+| Category | Expectation type |
+|---|---|
+| Row count | `expect_table_row_count_to_be_between` |
+| Column existence | `expect_column_to_exist` |
+| Not null | `expect_column_values_to_not_be_null` |
+| Uniqueness | `expect_column_values_to_be_unique` |
+| Value range | `expect_column_values_to_be_between` (amounts, dates) |
+| Format / regex | `expect_column_values_to_match_regex` (email, phone) |
+| Enum / referential | `expect_column_values_to_be_in_set` (status fields) |
+| Computed fields | not_be_null + be_between on loan_duration_days, emi_amount |
 
 ---
 
-### Principle 2 — Simplicity First
+## UC1 Open Gaps (required by training spec, not yet in code)
 
-Use the simplest tool that solves the problem. Do not reach for complexity until the simple
-approach provably fails.
+- `customers_suite.json` — `be_between` on `date_of_birth` (max = today, no future DOBs)
+- `customers_suite.json` — phone regex too permissive; must be digits only, 7–15 chars: `^\d{7,15}$`
+- `transactions_suite.json` — `be_between` on `transaction_date` (max = now, no future dates)
+- `transactions_suite.json` — `reference_id` uniqueness: remove `"mostly": 1.0`; must be strict
+- `loans_suite.json` — `not_be_null` on `outstanding_amount` (missing entirely)
+- `loans_suite.json` — `expect_column_pair_values_A_to_be_greater_than_B` for `end_date` > `start_date`
+- `run_gx.py` — Data Docs must write to `tests/reports/dq_good/` or `tests/reports/dq_bad/` per run, not one shared dir
 
-- Use built-in GX expectations before writing custom ones
-- Use a single Checkpoint file before building a multi-stage orchestration
-- Use a flat `conftest.py` before introducing fixtures hierarchies
-- Use `subprocess.run` in run_gx.py before building a full CLI wrapper
+## UC1 Deliverable Checklist
 
-**In practice for UC1:** The GX SQLAlchemy datasource + standard expectations covers everything
-in this project. No custom expectation classes needed.
-
----
-
-### Principle 3 — Surgical Changes
-
-Only touch what the task requires. Every file created must have a reason.
-
-- Never modify `app/`, `pipeline/`, `data/`, `db/` — those are the system under test
-- Never add debug prints or temp files and forget to remove them
-- Each commit should do exactly one thing and be describable in one line
-- When fixing a failing expectation, fix only that expectation — do not refactor the whole suite
-
-**In practice:** If a GX suite fails to connect to PostgreSQL, fix the connection string.
-Do not rewrite the entire suite file.
-
----
-
-### Principle 4 — Goal-Driven Execution
-
-Every action maps to a UC deliverable. If it doesn't, don't do it.
-
-The deliverables for UC1 are:
-- [ ] `customers_suite.json` exists and runs clean against good_data
-- [ ] `accounts_suite.json` exists and runs clean against good_data
-- [ ] `transactions_suite.json` exists and runs clean against good_data
-- [ ] `loans_suite.json` exists and runs clean against good_data
+- [ ] `customers_suite.json` runs clean against good_data
+- [ ] `accounts_suite.json` runs clean against good_data
+- [ ] `transactions_suite.json` runs clean against good_data
+- [ ] `loans_suite.json` runs clean against good_data
 - [ ] `fincore_checkpoint.yml` runs all 4 suites in one command
-- [ ] `run_gx.py` executes the checkpoint and exits 0 on pass, 1 on fail
+- [ ] `run_gx.py` exits 0 on pass, 1 on fail
 - [ ] `test_great_expectations.py` passes under `pytest`
-- [ ] Data Docs report generated for good_data run (all green)
-- [ ] Data Docs report generated for bad_data run (shows failures)
-- [ ] All files committed to `tests/dq/` in the repo
-
-When a deliverable is done, tick it off here and move to the next one. No scope creep.
+- [ ] Data Docs good_data report saved to `tests/reports/dq_good/` (all green)
+- [ ] Data Docs bad_data report saved to `tests/reports/dq_bad/` (failures visible)
 
 ---
 
-## 8. Current Status
-
-```
-Session date    : [update each session]
-Codespace state : devcontainer config committed, Codespace not yet opened
-Pipeline state  : not run yet
-UC1 state       : not started — waiting for Codespace verification
-```
-
-### Last action taken
-- Created `.devcontainer/devcontainer.json`
-- Created `.devcontainer/setup.sh`
-- Created `tests/.gitkeep`
-- Created this file (`claude.md`)
-
-### Next action
-Open Codespace on main → let setup.sh complete → verify environment → run pipeline with
-good_data → confirm 4 tables exist in PostgreSQL → begin UC1 Suite 1 (customers).
-
----
-
-## 9. Session Log
-
-| Session | Date | What was done | What is next |
-|---------|------|---------------|--------------|
-| 1 | 2026-05-02 | Devcontainer config created. claude.md created. Codespace not yet opened. | Open Codespace, verify env, run pipeline |
-
-> Add a new row at the start of every session. Keep entries short — one line per session.
-
----
-
-## 10. Key Decisions Made
+## Key Decisions
 
 | Decision | Reason |
-|----------|--------|
-| GitHub Codespaces over Docker | Docker not available on training machines |
-| GitHub Actions for UC5 | Replaces Jenkins — no server needed, same YAML logic |
+|---|---|
+| GitHub Codespaces, not Docker | Docker not available on training machines |
+| GitHub Actions for UC5 | Replaces Jenkins — no Docker server needed, same YAML logic |
 | Playwright for UC3 | Native headless in Codespaces, no display server needed |
-| GX 0.18.x (not 1.x) | Onboarding doc specifies 0.18+; 1.x has breaking API changes |
-| tests/ as sole workspace | Onboarding doc rule: never modify the system under test |
-
----
-
-*Keep this file up to date. An outdated claude.md is worse than no claude.md.*
+| GX 0.18.x not 1.x | Training spec pins 0.18+; 1.x has breaking API changes |
+| `tests/dq/gx/` as GX root | Deliberate deviation from PDF spec (`tests/dq/great_expectations/`) — functionally equivalent |

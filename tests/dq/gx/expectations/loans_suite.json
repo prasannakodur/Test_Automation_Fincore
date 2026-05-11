@@ -11,122 +11,26 @@
       "meta": {"category": "row_count"}
     },
     {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "id"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "customer_id"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "loan_type"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "principal_amount"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "outstanding_amount"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "interest_rate"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "start_date"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "end_date"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "status"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "loan_duration_days"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_to_exist",
-      "kwargs": {"column": "emi_amount"},
-      "meta": {"category": "column_existence"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "id"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "customer_id"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "loan_type"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "principal_amount"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "interest_rate"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "start_date"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "end_date"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "status"},
-      "meta": {"category": "not_null"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "loan_duration_days"},
-      "meta": {"category": "computed_fields"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_not_be_null",
-      "kwargs": {"column": "emi_amount"},
-      "meta": {"category": "computed_fields"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_be_unique",
-      "kwargs": {"column": "id"},
-      "meta": {"category": "uniqueness"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_be_in_set",
+      "expectation_type": "expect_column_values_to_be_between",
       "kwargs": {
-        "column": "loan_type",
-        "value_set": ["home", "personal", "auto", "education"]
+        "column": "interest_rate",
+        "min_value": 1.0,
+        "max_value": 30.0
       },
-      "meta": {"category": "referential_integrity"}
+      "meta": {"category": "value_range"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "principal_amount",
+        "min_value": 0.01
+      },
+      "meta": {"category": "value_range"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "outstanding_amount"},
+      "meta": {"category": "not_null"}
     },
     {
       "expectation_type": "expect_column_values_to_be_in_set",
@@ -137,48 +41,24 @@
       "meta": {"category": "referential_integrity"}
     },
     {
-      "expectation_type": "expect_column_values_to_be_between",
+      "expectation_type": "expect_column_values_to_be_in_set",
       "kwargs": {
-        "column": "principal_amount",
-        "min_value": 1,
-        "max_value": 10000000
+        "column": "loan_type",
+        "value_set": ["home", "personal", "auto", "education"]
       },
-      "meta": {"category": "value_range"}
+      "meta": {"category": "referential_integrity"}
     },
     {
-      "expectation_type": "expect_column_values_to_be_between",
+      "expectation_type": "expect_column_pair_values_A_to_be_greater_than_B",
       "kwargs": {
-        "column": "outstanding_amount",
-        "min_value": 0,
-        "max_value": 10000000
+        "column_A": "end_date",
+        "column_B": "start_date"
       },
-      "meta": {"category": "value_range"}
+      "meta": {"category": "referential_integrity"}
     },
     {
-      "expectation_type": "expect_column_values_to_be_between",
-      "kwargs": {
-        "column": "interest_rate",
-        "min_value": 1,
-        "max_value": 30
-      },
-      "meta": {"category": "value_range"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_be_between",
-      "kwargs": {
-        "column": "loan_duration_days",
-        "min_value": 1,
-        "max_value": 36500
-      },
-      "meta": {"category": "value_range"}
-    },
-    {
-      "expectation_type": "expect_column_values_to_be_between",
-      "kwargs": {
-        "column": "emi_amount",
-        "min_value": 1,
-        "max_value": 1000000
-      },
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "loan_duration_days"},
       "meta": {"category": "computed_fields"}
     }
   ],

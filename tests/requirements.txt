@@ -2,5 +2,5 @@ great-expectations==0.18.15
 pytest==7.4.4
 pytest-html==4.1.1
 psycopg2-binary==2.9.9
-sqlalchemy==1.4.51
+sqlalchemy==1.4.46
 python-dotenv==1.0.0
